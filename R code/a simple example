@@ -1,0 +1,43 @@
+#' The path-following algorithm for adaptive lasso penalized GLM in distributed big data based on quadratic approximation and LARS 
+#'
+#' @param Y The response vector
+#' @param X The design matrix (with intercept)
+#' @param K Number of partitions
+#' @param type The model type, currently support ("logistic" and "poisson")
+#' @param maxstep Maximum number of iterations allowed
+#' @return The running time, the optimal coefficient estimation and the corresponding regularization parameter value, the entire regularization paths and the regularization parameter values at which the active set changes  
+#' @examples
+
+
+N = 200000
+p = 100
+d = 15
+pho = 0.5
+beta_true = c(c(2,0,1.5,0,0.8,0,0,-1,0,-1.75,0,0,-0.75,0,0,0.3),rep(0,p-d))
+K = 10
+maxstep = 1000
+
+
+X = matrix(rnorm(p*N), nrow=N)
+getcov = function(p,pho){
+   cov=diag(p)
+   for(j in 1:p){  
+     for(k in 1:p){
+       if(j<k){cov[j,k]=pho^(k-j)}
+       else{cov[j,k]=cov[k,j]}
+     }
+   }
+   return(cov)	
+}
+cov = getcov(p, pho)
+X = cbind(1, X%*%chol(cov))
+Xbeta = X%*%beta_true
+mu = exp(Xbeta)/(exp(Xbeta)+1)
+Y = apply(mu, 1, rbinom, n = 1, size = 1) 
+
+result = QAGLMalasso(X, Y, K, type = "logistic", maxstep)
+beta_QA = result$beta_optimal
+AE_QA = sum(abs(beta_QA-beta_true))
+df_QA = sum(beta_QA != 0)-1
+time_QA = result$time
+
