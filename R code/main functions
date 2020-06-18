@@ -1,0 +1,138 @@
+##LARs algorithm for QAGLM-alasso
+GLMLARs = function(betaini, Sini, Fini, Weight, maxstep){
+  
+  p = length(betaini)
+  betafinal = matrix(0, maxstep, p)
+  lambdafinal = rep(0, maxstep)
+  betalogical = rep(FALSE, p)
+  
+  inter = drop(Fini[1,]%*%betaini+Sini[1])/Fini[1,1]
+  beta = c(inter, rep(0, p-1))
+  betafinal[1,] = beta
+  Fslope = Fini[-1,]
+  Sslope = Sini[-1]
+  lambdaalter = abs(Fslope%*%(betaini-beta)+Sslope)/Weight[-1]
+  lambda = max(lambdaalter)
+  betaindex = which(lambdaalter == lambda)+1
+  lambdafinal[1] = lambda
+  betalogical[1] = TRUE
+  betalogical[betaindex] = TRUE
+  
+  step = 2
+  while(step <= maxstep){
+    
+    signindi =  Fini%*%(betaini-beta)+Sini
+    slope = solve(Fini[betalogical, betalogical])%*%(Weight[betalogical]*sign(signindi[betalogical]))
+    deltabeta = Fini[!betalogical, betalogical]%*%slope
+    deltabeta2 = Fini[!betalogical, ]%*%(betaini-beta)+Sini[!betalogical]
+    positive = drop(deltabeta < deltabeta2/lambda)
+    negative = drop(deltabeta > deltabeta2/lambda)
+    lambdaalter = rep(Inf, p)
+    lambdaalter[!betalogical][positive] = (lambda*Weight[!betalogical][positive]-deltabeta2[positive])/(Weight[!betalogical][positive]-deltabeta[positive])
+    lambdaalter[!betalogical][negative] = (lambda*Weight[!betalogical][negative]+deltabeta2[negative])/(Weight[!betalogical][negative]+deltabeta[negative])
+    betalogical[1] = FALSE
+    lambdaalter[betalogical] = -beta[betalogical]/slope[-1,]
+    betalogical[1] = TRUE
+    lambdaalter[lambdaalter <= 0] = Inf
+    deltalambda = min(lambdaalter)
+    if(deltalambda == Inf){   
+      print('no feasible steps')
+      break
+    }
+    betaindex = which(lambdaalter == deltalambda)
+    beta[betalogical] = beta[betalogical] + drop(slope*deltalambda)
+    betafinal[step,] = beta
+    lambda = lambda - deltalambda
+    lambdafinal[step] = lambda
+    if(lambda <= 0){
+      print('lambda turns to 0')
+      break
+    }
+    betalogical[betaindex] = !betalogical[betaindex]
+    step = step + 1
+    
+  }
+  stepfinal = sum(lambdafinal!=0)
+  return(list(lambda = lambdafinal[1:stepfinal], beta = betafinal[(1:stepfinal),], step = step))
+}
+
+grad = function(X, Y, beta, type){
+  N = length(Y)
+  Xbeta = drop(X%*%beta)
+  if(type == "logistic"){mu = exp(Xbeta)/(exp(Xbeta)+1)}
+  if(type == "poisson"){mu = exp(Xbeta)}
+  grad = apply(sweep(X, 1, (Y-mu), "*"), 2, sum)/N
+  return(grad)
+}
+
+hess = function(X, Y, beta, type){
+  N = length(Y)
+  Xbeta = drop(X%*%beta)
+  if(type == "logistic"){sigma = (exp(Xbeta)/(exp(Xbeta)+1))*(1/(exp(Xbeta)+1))}
+  if(type == "poisson"){sigma = exp(Xbeta)}
+  WX = sweep(X, 1, sigma,"*")
+  hess = t(X)%*%WX/N
+  return(hess)
+}  
+
+##parallel adaptive lasso for GLM
+QAGLMalasso = function(X, Y, K, type, maxstep){
+  
+  N = length(Y)
+  p = dim(X)[2]
+  n = N/K
+  Fsum = matrix(0, p, p)
+  Fbeta = matrix(0, p, 1)
+  maptime1 = maptime2 = rep(0, K)
+  reducetime1 = reducetime2 = 0
+  for(k in 1:K){
+    xk = X[(1+(k-1)*n):(k*n),]
+    yk = Y[(1+(k-1)*n):(k*n)]
+    xyk = data.frame(yk = yk, xk = xk)
+    ptm = proc.time()
+    if(type == "logistic"){glmk = glm(yk~xk[,2:p], data = xyk, family = binomial(link="logit"), control = list(maxit = 100))}
+    if(type == "poisson"){glmk = glm(yk~xk[,2:p], data = xyk, family = poisson(link ="log"), control = list(maxit = 100))}
+    betak = glmk$coef
+    Fk = hess(xk, yk, betak, type)
+    Fbeta = Fbeta+Fk%*%betak
+    Fsum = Fsum+Fk
+    maptime1[k] = (proc.time() - ptm)[3]
+  }
+  ptm = proc.time()
+  betabar = drop(solve(Fsum)%*%Fbeta)
+  reducetime1 = (proc.time() - ptm)[3]
+  Fbar = matrix(0, p, p)
+  Sbar = rep(0, p)
+  for(k in 1:K){
+    xk = X[(1+(k-1)*n):(k*n),]
+    yk = Y[(1+(k-1)*n):(k*n)]
+    ptm = proc.time()
+    Fbar = Fbar+hess(xk, yk, betabar, type)
+    Sbar = Sbar+grad(xk, yk, betabar, type)
+    maptime2[k] = (proc.time() - ptm)[3]
+  }
+  ptm = proc.time()
+  Weight = (abs(1/(betabar+1/N)))^3
+  Weight[1] = 0
+  estimation = GLMLARs(betabar, Sbar, Fbar, Weight, maxstep)
+  lambdafinal = estimation$lambda
+  betafinal =  estimation$beta
+  reducetime2 = (proc.time() - ptm)[3]
+  time = max(maptime1)+max(maptime2)+reducetime1+reducetime2
+  timevec = c(max(maptime1), reducetime1, max(maptime2), reducetime2)
+  
+  Fbar = hess(X, Y, betabar, type)
+  Sbar = grad(X, Y, betabar, type)
+  stepfinal = length(lambdafinal)
+  BICfinal = rep(0, stepfinal)
+  for(i in 1:stepfinal){
+    d = sum(betafinal[i,] != 0)
+    deltabeta = betafinal[i,]-betabar
+    BICfinal[i] = 0.5*drop(t(deltabeta)%*%Fbar%*%deltabeta)-drop(t(Sbar)%*%deltabeta)+p*d*log(log(N))/N     
+  }
+  optimal = which(BICfinal == min(BICfinal))
+  lambda_optimal = lambdafinal[optimal]
+  beta_optimal = betafinal[optimal,]
+  return(list(time = time, lambda_optimal = lambda_optimal, beta_optimal = beta_optimal, lambda = lambdafinal, beta = betafinal))
+  
+}
