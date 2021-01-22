@@ -36,8 +36,7 @@ mu = exp(Xbeta)/(exp(Xbeta)+1)
 Y = apply(mu, 1, rbinom, n = 1, size = 1) 
 
 result = QAGLMalasso(X, Y, K, type = "logistic", maxstep)
-beta_QA = result$beta_optimal
-AE_QA = sum(abs(beta_QA-beta_true))
-df_QA = sum(beta_QA != 0)-1
-time_QA = result$time
+result$beta_final
+result$lambda_final
+result$time
 
