@@ -5,7 +5,7 @@
 #' @param K Number of partitions
 #' @param type The model type, currently support ("logistic" and "poisson")
 #' @param maxstep Maximum number of iterations allowed
-#' @return The running time, the optimal coefficient estimation and the corresponding regularization parameter value, the entire regularization paths and the regularization parameter values at which the active set changes  
+#' @return The running time, the entire regularization paths and the regularization parameter values at which the active set changes  
 #' @examples
 
 
