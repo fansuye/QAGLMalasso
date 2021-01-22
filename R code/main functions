@@ -121,18 +121,6 @@ QAGLMalasso = function(X, Y, K, type, maxstep){
   time = max(maptime1)+max(maptime2)+reducetime1+reducetime2
   timevec = c(max(maptime1), reducetime1, max(maptime2), reducetime2)
   
-  Fbar = hess(X, Y, betabar, type)
-  Sbar = grad(X, Y, betabar, type)
-  stepfinal = length(lambdafinal)
-  BICfinal = rep(0, stepfinal)
-  for(i in 1:stepfinal){
-    d = sum(betafinal[i,] != 0)
-    deltabeta = betafinal[i,]-betabar
-    BICfinal[i] = 0.5*drop(t(deltabeta)%*%Fbar%*%deltabeta)-drop(t(Sbar)%*%deltabeta)+p*d*log(log(N))/N     
-  }
-  optimal = which(BICfinal == min(BICfinal))
-  lambda_optimal = lambdafinal[optimal]
-  beta_optimal = betafinal[optimal,]
-  return(list(time = time, lambda_optimal = lambda_optimal, beta_optimal = beta_optimal, lambda = lambdafinal, beta = betafinal))
+  return(list(time = time, lambda = lambdafinal, beta = betafinal))
   
 }
