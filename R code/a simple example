@@ -1,4 +1,4 @@
-#' The path-following algorithm for adaptive lasso penalized GLM in distributed big data based on quadratic approximation and LARS 
+#' The path-following algorithm for adaptive lasso penalized GLMs in distributed big data based on quadratic approximation and LARS 
 #'
 #' @param Y The response vector
 #' @param X The design matrix (with intercept)
