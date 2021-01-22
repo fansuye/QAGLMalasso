@@ -36,7 +36,7 @@ mu = exp(Xbeta)/(exp(Xbeta)+1)
 Y = apply(mu, 1, rbinom, n = 1, size = 1) 
 
 result = QAGLMalasso(X, Y, K, type = "logistic", maxstep)
-result$beta_final
-result$lambda_final
+result$beta
+result$lambda
 result$time
 
